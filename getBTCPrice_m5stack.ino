@@ -1,23 +1,25 @@
-#include <M5Stack.h>
+
+using namespace std;
+#include "Free_Fonts.h"
 #include <WiFi.h>
-#include <WiFiMulti.h>
+#include <M5Stack.h>
 #include <string>
 #include <math.h>
-#include <utility\Fonts\FreeMonoBold24pt7b.h>
-#include <utility\Fonts\FreeSans9pt7b.h>
 #include <vector>
 #include <string>
-using namespace std;
-WiFiMulti WiFiMulti;
 
-int status = WL_IDLE_STATUS;
 int lastPrice = 0;
 int currentPrice;
-int minPrice = 9999999; 
+int minPrice = 999999999; 
 int maxPrice = 0;
 char servername[] = "api.coindesk.com"; // Google
 String answer;
+
 WiFiClient client;
+int status = WL_IDLE_STATUS;            // the Wifi radio's status
+
+char ssid[]     = "SSID";
+char password[] = "***********";
 
 vector<string> split(const char *str, char c = '|')
 {
@@ -34,16 +36,22 @@ vector<string> split(const char *str, char c = '|')
 
 
 void setup() {
-  WiFiMulti.addAP("SSID", "PASSWORD");
   Serial.begin(115200);
-  m5.begin();
-  m5.lcd.setBrightness(25);
-  m5.update();
+  delay(100);
+  Serial.println(readFile(SD, "/LowHigh.txt").c_str());
+  Serial.print("Connecting to ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
 
-  while (WiFiMulti.run() != WL_CONNECTED) {
-    delay(500);
+  while (WiFi.status() != WL_CONNECTED) {
+      delay(500);
+      Serial.print(".");
   }
-
+  
+  M5.begin();
+  M5.lcd.setBrightness(25);
+  M5.Lcd.setTextDatum(MC_DATUM);
+  M5.update();
   vector<string> LowHigh = split(readFile(SD, "/LowHigh.txt").c_str());
   String low = String(LowHigh.at(0).c_str());
   String high = String(LowHigh.at(1).c_str());
@@ -75,7 +83,7 @@ void loop() {
 
   // if the server's disconnected, stop the client:
   if (!client.connected()) {
-    m5.update();
+    M5.update();
     client.stop();
 
     String jsonAnswer;
@@ -107,38 +115,51 @@ void loop() {
 
     currentPrice = (Dollars + Cents).toInt();
     if (currentPrice < minPrice || currentPrice > maxPrice ){
-      writeFile(SD, "/LowHigh.txt", (String(minPrice) + "|" + String(maxPrice)).c_str());
+      minPrice = min(minPrice,currentPrice);
+      maxPrice = max(maxPrice,currentPrice);
+      writeFile(SD, "/LowHigh.txt", ( String(minPrice) + "|" + String(maxPrice)).c_str());
     }
-    minPrice = std::min(minPrice,currentPrice);
-    maxPrice = std::max(maxPrice,currentPrice);
-    
-    m5.Lcd.fillScreen(0x0000);
-    m5.Lcd.setFont(&FreeSans9pt7b);
-    
-    m5.Lcd.setTextColor(RED);
-    m5.Lcd.setCursor(20, 20);
-    m5.Lcd.printf(("Min: " + String(minPrice).substring(0,Dollars.length()) + "." + String(minPrice).substring(Dollars.length())).c_str());
-    
-    m5.Lcd.setTextColor(GREEN);
-    m5.Lcd.setCursor(205, 20);
-    m5.Lcd.printf(("Max: " + String(maxPrice).substring(0,Dollars.length()) + "." + String(maxPrice).substring(Dollars.length())).c_str());
+    else{
+      minPrice = min(minPrice,currentPrice);
+      maxPrice = max(maxPrice,currentPrice);
+    }
 
-    m5.Lcd.setTextColor(WHITE);
-    m5.Lcd.setCursor(30, 80);
-    m5.Lcd.setFont(&FreeMonoBold24pt7b);
-    m5.Lcd.printf("BTC Price");
-    m5.Lcd.printf("\r\n");
+    /*DRAW
+     * 
+     */
+    M5.Lcd.fillScreen(TFT_BLACK);
+    M5.Lcd.setFreeFont(FSSBO9);
+
+    int ypos = 200;
+    int fHeight = M5.Lcd.fontHeight(GFXFF);
     
-    m5.Lcd.setCursor(50, 140);
-    m5.Lcd.printf(Amount.c_str());
+    M5.Lcd.setTextColor(RED);
+    String str_minPrice = String(minPrice);
+    String str_minPriceDollars = str_minPrice.substring(0,str_minPrice.length()-2);
+    String str_minPriceCents = str_minPrice.substring(str_minPrice.length()-2);
+    M5.Lcd.drawString("Min:",260,ypos,GFXFF);
+    M5.Lcd.drawString("$" + str_minPriceDollars + "." + str_minPriceCents, 260, ypos + fHeight, GFXFF);
+        
+    M5.Lcd.setTextColor(GREEN);
+    String str_maxPrice = String(maxPrice);
+    String str_maxPriceDollars = str_maxPrice.substring(0,str_maxPrice.length()-2);
+    String str_maxPriceCents   = str_maxPrice.substring(str_maxPrice.length()-2);
+    M5.Lcd.drawString("Max:",60,ypos,GFXFF);
+    M5.Lcd.drawString("$" + str_maxPriceDollars + "." + str_maxPriceCents, 60, ypos + fHeight, GFXFF);
+    
+    M5.Lcd.setTextColor(WHITE);
+    M5.Lcd.setFreeFont(FSSBO18);
+    M5.Lcd.drawString("BTC Price", 160, 60, GFXFF);
+    M5.Lcd.setFreeFont(FSSBO24);
+    M5.Lcd.drawString(Amount, 160, 120, GFXFF);
 
     if (currentPrice >= lastPrice) //UP
     {
-      m5.Lcd.fillTriangle(140, 205, 180, 205, 160, 180, GREEN);
+      M5.Lcd.fillTriangle(140, 205, 180, 205, 160, 180, GREEN);
     }
     else if (currentPrice < lastPrice) //Down
     {
-      m5.Lcd.fillTriangle(140, 205, 180, 205, 160, 230, RED);
+      M5.Lcd.fillTriangle(140, 205, 180, 205, 160, 230, RED);
     }
     
     lastPrice = currentPrice;
@@ -146,15 +167,15 @@ void loop() {
     // delay 10 seconds
     for (int i = 0; i < 30; i++){
       if(M5.BtnA.wasPressed()) {
-        m5.lcd.setBrightness(0);
+        M5.lcd.setBrightness(0);
       }
       if(M5.BtnB.wasPressed()) {
-        m5.lcd.setBrightness(25);
+        M5.lcd.setBrightness(25);
       }
       if(M5.BtnC.wasPressed()) {
-        m5.lcd.setBrightness(150);
+        M5.lcd.setBrightness(150);
       }
-      m5.update();
+      M5.update();
       delay(1000);
     }
     answer = "";
@@ -169,6 +190,7 @@ String readFile(fs::FS &fs, const char * path) {
 
     File file = fs.open(path);
     if(!file){
+        writeFile(SD, "/LowHigh.txt", ( String(minPrice) + "|" + String(maxPrice)).c_str());
         return "";
     }
     
@@ -176,7 +198,6 @@ String readFile(fs::FS &fs, const char * path) {
     while(file.available()){
         char ch = file.read();
         stringbuilder += String(ch);
-        Serial.println(stringbuilder);
     }
     return stringbuilder;
 }
